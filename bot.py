@@ -8,9 +8,11 @@ from aiogram.fsm.context import FSMContext
 from aiogram.fsm.storage.memory import MemoryStorage
 from datetime import datetime, timedelta
 import requests
+import random
 
-API_TOKEN = 'your token'
+API_TOKEN = 'yours'
 HOROSCOPE_API_URL = 'https://horoscopes.rambler.ru/'  # Замените на реальный URL вашего API гороскопа
+UNSPLASH_API_KEY = 'yours'
 zodiac_signs = {
   "♈️": "aries",
   "♉️": "taurus",
@@ -77,12 +79,46 @@ def format_horoscope(soup):
 
 # Функция для отправки гороскопа
 async def send_horoscope(user_id, zodiac_sign, horoscope):
-    text = f"Ваш знак зодиака: {zodiac_sign}\nГороскоп на **{horoscope['date']}**: {horoscope['description']}"
-    await bot.send_message(user_id, text, reply_markup=InlineKeyboardMarkup(
-        inline_keyboard=[
-            [InlineKeyboardButton(text="Обновить", callback_data="refresh_horoscope")]
-        ]
-    ))
+    text = f"Ваш знак зодиака: {zodiac_sign}\nГороскоп на {horoscope['date']}: {horoscope['description']}"
+    
+    image_url = await get_unsplash_image(zodiac_sign)
+    if image_url:
+        await bot.send_photo(
+            chat_id=user_id,
+            photo=image_url, 
+            caption=text,
+            reply_markup=InlineKeyboardMarkup(
+                inline_keyboard=[
+                    [InlineKeyboardButton(text="Обновить", callback_data="refresh_horoscope")]
+                ]
+            )
+        )
+    else:
+        await bot.send_message(chat_id=user_id, text=text, reply_markup=InlineKeyboardMarkup(
+                inline_keyboard=[
+                    [InlineKeyboardButton(text="Обновить", callback_data="refresh_horoscope")]
+                ]
+            )
+        )
+
+
+async def get_unsplash_image(query):
+  url = 'https://api.unsplash.com/search/photos'
+  query = query
+  params = {
+    'query': query,
+    'client_id': UNSPLASH_API_KEY,
+    'per_page': 1,
+    'include' : 'zodiac sign',
+    'exclude' : 'illness and doctors',
+    'page': random.randint(1, 10) # Добавляем случайную страницу
+  }
+  response = requests.get(url, params=params)
+  if response.status_code == 200:
+    data = response.json()
+    if data['results']:
+      return data['results'][0]['urls']['regular']
+  return None
 
 # Команда /start
 @dp.message(CommandStart())
@@ -120,7 +156,7 @@ async def refresh_horoscope(callback_query: types.CallbackQuery):
         user_data[user_id]['horoscope'] = horoscope_data
         await send_horoscope(user_id, zodiac_sign, horoscope_data)
     await callback_query.message.edit_text(
-        f"Ваш знак зодиака: {zodiac_sign}\nГороскоп на **{horoscope_data['date']}**: {horoscope_data['description']}",
+        f"Ваш знак зодиака: {zodiac_sign}\nГороскоп на {horoscope_data['date']}: {horoscope_data['description']}",
         reply_markup=InlineKeyboardMarkup(
         inline_keyboard=[
             [InlineKeyboardButton(text="Обновить", callback_data="refresh_horoscope")]
